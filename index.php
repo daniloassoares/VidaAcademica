@@ -1,233 +1,10 @@
-<?php
-// config.php - Configuração do banco de dados
-class Database {
-    private $host = 'localhost';
-    private $db_name = 'dados_consulares';
-    private $username = 'root'; // Altere conforme necessário
-    private $password = ''; // Altere conforme necessário
-    private $conn;
-    
-    public function getConnection() {
-        $this->conn = null;
-        try {
-            $this->conn = new PDO(
-                "mysql:host=" . $this->host . ";dbname=" . $this->db_name . ";charset=utf8mb4",
-                $this->username,
-                $this->password,
-                [
-                    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-                    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC
-                ]
-            );
-        } catch(PDOException $exception) {
-            echo "Erro de conexão: " . $exception->getMessage();
-        }
-        return $this->conn;
-    }
-}
-
-// ProcessoConsular.php - Classe para gerenciar os dados
-class ProcessoConsular {
-    private $conn;
-    private $table_name = "processos_consulares";
-    
-    public function __construct($db) {
-        $this->conn = $db;
-    }
-    
-    public function criar($dados) {
-        $query = "INSERT INTO " . $this->table_name . " 
-                  (nome, data_envio_doc, data_recebimento_vfs, vfs_informa_email, 
-                   vfs_informa_pendencia, vfs_criou_ref, email_consulado, 
-                   consulado_pendencia, consulado_devolver, tipo_investimento, 
-                   data_finalizou, local) 
-                  VALUES (:nome, :data_envio_doc, :data_recebimento_vfs, :vfs_informa_email,
-                          :vfs_informa_pendencia, :vfs_criou_ref, :email_consulado,
-                          :consulado_pendencia, :consulado_devolver, :tipo_investimento,
-                          :data_finalizou, :local)";
-        
-        $stmt = $this->conn->prepare($query);
-        
-        foreach($dados as $key => $value) {
-            $stmt->bindValue(':' . $key, empty($value) ? null : $value);
-        }
-        
-        return $stmt->execute();
-    }
-    
-    public function atualizar($id, $dados) {
-        $query = "UPDATE " . $this->table_name . " 
-                  SET nome = :nome, data_envio_doc = :data_envio_doc, 
-                      data_recebimento_vfs = :data_recebimento_vfs, 
-                      vfs_informa_email = :vfs_informa_email,
-                      vfs_informa_pendencia = :vfs_informa_pendencia, 
-                      vfs_criou_ref = :vfs_criou_ref, 
-                      email_consulado = :email_consulado,
-                      consulado_pendencia = :consulado_pendencia, 
-                      consulado_devolver = :consulado_devolver, 
-                      tipo_investimento = :tipo_investimento,
-                      data_finalizou = :data_finalizou, local = :local 
-                  WHERE id = :id";
-        
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':id', $id);
-        
-        foreach($dados as $key => $value) {
-            $stmt->bindValue(':' . $key, empty($value) ? null : $value);
-        }
-        
-        return $stmt->execute();
-    }
-    
-    public function excluir($id) {
-        $query = "DELETE FROM " . $this->table_name . " WHERE id = :id";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':id', $id);
-        return $stmt->execute();
-    }
-    
-    public function buscarTodos() {
-        $query = "SELECT * FROM " . $this->table_name . " ORDER BY created_at DESC";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute();
-        return $stmt->fetchAll();
-    }
-    
-    public function buscarPorId($id) {
-        $query = "SELECT * FROM " . $this->table_name . " WHERE id = :id";
-        $stmt = $this->conn->prepare($query);
-        $stmt->bindParam(':id', $id);
-        $stmt->execute();
-        return $stmt->fetch();
-    }
-    
-    public function obterEstatisticas() {
-        $query = "SELECT * FROM vw_estatisticas";
-        $stmt = $this->conn->prepare($query);
-        $stmt->execute();
-        return $stmt->fetch();
-    }
-    
-    private function calcularDias($dataInicio, $dataFim) {
-        if (empty($dataInicio) || empty($dataFim)) return null;
-        $inicio = new DateTime($dataInicio);
-        $fim = new DateTime($dataFim);
-        return $inicio->diff($fim)->days;
-    }
-    
-    private function formatarData($data) {
-        if (empty($data)) return '-';
-        return date('d/m/Y', strtotime($data));
-    }
-}
-
-// Inicialização
-$database = new Database();
-$db = $database->getConnection();
-$processo = new ProcessoConsular($db);
-
-// Processamento de formulários
-$mensagem = '';
-$editando = false;
-$dadosEdicao = null;
-
-if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $acao = $_POST['acao'] ?? '';
-    
-    switch($acao) {
-        case 'criar':
-            $dados = [
-                'nome' => $_POST['nome'],
-                'data_envio_doc' => $_POST['dataEnvioDoc'],
-                'data_recebimento_vfs' => $_POST['dataRecebimentoVfs'],
-                'vfs_informa_email' => $_POST['vfsInformaEmail'],
-                'vfs_informa_pendencia' => $_POST['vfsInformaPendencia'],
-                'vfs_criou_ref' => $_POST['vfsCriouRef'],
-                'email_consulado' => $_POST['emailConsulado'],
-                'consulado_pendencia' => $_POST['consuladoPendencia'],
-                'consulado_devolver' => $_POST['consuladoDevolver'],
-                'tipo_investimento' => $_POST['tipoInvestimento'],
-                'data_finalizou' => $_POST['dataFinalizou'],
-                'local' => $_POST['local']
-            ];
-            
-            if ($processo->criar($dados)) {
-                $mensagem = "Registro adicionado com sucesso!";
-            } else {
-                $mensagem = "Erro ao adicionar registro.";
-            }
-            break;
-            
-        case 'atualizar':
-            $id = $_POST['id'];
-            $dados = [
-                'nome' => $_POST['nome'],
-                'data_envio_doc' => $_POST['dataEnvioDoc'],
-                'data_recebimento_vfs' => $_POST['dataRecebimentoVfs'],
-                'vfs_informa_email' => $_POST['vfsInformaEmail'],
-                'vfs_informa_pendencia' => $_POST['vfsInformaPendencia'],
-                'vfs_criou_ref' => $_POST['vfsCriouRef'],
-                'email_consulado' => $_POST['emailConsulado'],
-                'consulado_pendencia' => $_POST['consuladoPendencia'],
-                'consulado_devolver' => $_POST['consuladoDevolver'],
-                'tipo_investimento' => $_POST['tipoInvestimento'],
-                'data_finalizou' => $_POST['dataFinalizou'],
-                'local' => $_POST['local']
-            ];
-            
-            if ($processo->atualizar($id, $dados)) {
-                $mensagem = "Registro atualizado com sucesso!";
-            } else {
-                $mensagem = "Erro ao atualizar registro.";
-            }
-            break;
-            
-        case 'excluir':
-            $id = $_POST['id'];
-            if ($processo->excluir($id)) {
-                $mensagem = "Registro excluído com sucesso!";
-            } else {
-                $mensagem = "Erro ao excluir registro.";
-            }
-            break;
-    }
-    
-    // Redirect para evitar resubmissão
-    if (!empty($mensagem)) {
-        header("Location: " . $_SERVER['PHP_SELF'] . "?msg=" . urlencode($mensagem));
-        exit;
-    }
-}
-
-// Verificar se está editando
-if (isset($_GET['editar'])) {
-    $editando = true;
-    $dadosEdicao = $processo->buscarPorId($_GET['editar']);
-}
-
-// Obter dados para exibição
-$registros = $processo->buscarTodos();
-$estatisticas = $processo->obterEstatisticas();
-
-// Funções auxiliares
-function formatarData($data) {
-    if (empty($data)) return '-';
-    return date('d/m/Y', strtotime($data));
-}
-
-function calcularDias($dataInicio, $dataFim) {
-    if (empty($dataInicio) || empty($dataFim)) return '-';
-    $inicio = new DateTime($dataInicio);
-    $fim = new DateTime($dataFim);
-    return $inicio->diff($fim)->days . ' dias';
-}
-?>
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sistema de Coleta de Dados Consulares</title>
+    <title>Danilo Soares | Analista de TI | Bacharel-Ciência da Computação (2020-2023), Pós-graduado Software. NOC, Datacenter&Cloud. Zabbix, Grafana, Dynatrace, Python, PHP.</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
     <style>
         * {
             margin: 0;
@@ -237,632 +14,818 @@ function calcularDias($dataInicio, $dataFim) {
 
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             min-height: 100vh;
-            padding: 20px;
         }
 
         .container {
-            max-width: 1400px;
+            max-width: 1200px;
             margin: 0 auto;
+            padding: 20px;
+        }
+
+        /* Header Moderno */
+        .header {
             background: rgba(255, 255, 255, 0.95);
-            border-radius: 20px;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
             backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            position: relative;
             overflow: hidden;
         }
 
-        .header {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        .header::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2, #f093fb);
+            animation: gradient-shift 3s ease-in-out infinite;
+        }
+
+        @keyframes gradient-shift {
+            0%, 100% { transform: translateX(-100%); }
+            50% { transform: translateX(100%); }
+        }
+
+        .profile-img {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            margin: 0 auto 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 48px;
             color: white;
-            padding: 30px;
-            text-align: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease;
+        }
+
+        .profile-img:hover {
+            transform: scale(1.05) rotate(5deg);
         }
 
         .header h1 {
             font-size: 2.5rem;
             margin-bottom: 10px;
-            font-weight: 700;
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
         }
 
         .header p {
-            font-size: 1.1rem;
-            opacity: 0.9;
-        }
-
-        .content {
-            padding: 40px;
-        }
-
-        .alert {
-            padding: 15px;
+            font-size: 1.2rem;
+            color: #666;
             margin-bottom: 20px;
-            border-radius: 10px;
-            background: #d4edda;
-            border: 1px solid #c3e6cb;
-            color: #155724;
         }
 
-        .alert.error {
-            background: #f8d7da;
-            border-color: #f5c6cb;
-            color: #721c24;
-        }
-
-        .form-section {
-            background: white;
-            border-radius: 15px;
-            padding: 30px;
-            margin-bottom: 40px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(102, 126, 234, 0.1);
-        }
-
-        .form-section h2 {
-            color: #667eea;
-            margin-bottom: 25px;
-            font-size: 1.8rem;
-            font-weight: 600;
-        }
-
-        .form-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        .contact-quick {
+            display: flex;
+            justify-content: center;
             gap: 20px;
-            margin-bottom: 30px;
+            flex-wrap: wrap;
         }
 
-        .form-group {
-            position: relative;
-        }
-
-        .form-group label {
-            display: block;
-            margin-bottom: 8px;
-            font-weight: 600;
-            color: #555;
-            font-size: 0.95rem;
-        }
-
-        .form-group input, .form-group select {
-            width: 100%;
-            padding: 15px;
-            border: 2px solid #e1e5e9;
-            border-radius: 10px;
-            font-size: 1rem;
+        .contact-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 16px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 20px;
+            text-decoration: none;
+            color: #667eea;
             transition: all 0.3s ease;
-            background: rgba(255, 255, 255, 0.8);
         }
 
-        .form-group input:focus, .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        .contact-item:hover {
+            background: #667eea;
+            color: white;
             transform: translateY(-2px);
         }
 
-        .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            padding: 15px 30px;
-            border-radius: 10px;
-            font-size: 1.1rem;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+        /* Grid Layout */
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
         }
 
-        .btn-primary:hover {
-            transform: translateY(-3px);
-            box-shadow: 0 10px 25px rgba(102, 126, 234, 0.4);
-        }
-
-        .btn-secondary {
-            background: #6c757d;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 8px;
-            font-size: 0.9rem;
-            cursor: pointer;
-            transition: all 0.3s ease;
-            margin-left: 10px;
-        }
-
-        .btn-secondary:hover {
-            background: #5a6268;
-            transform: translateY(-1px);
-        }
-
-        .table-section {
-            background: white;
-            border-radius: 15px;
+        .card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
             padding: 30px;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(102, 126, 234, 0.1);
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
         }
 
-        .table-section h2 {
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 3px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .card:hover {
+            transform: translateY(-10px);
+            box-shadow: 0 30px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        .card h2 {
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: #333;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .card h2 i {
             color: #667eea;
-            margin-bottom: 25px;
-            font-size: 1.8rem;
+        }
+
+.privacy-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    opacity: 0;
+    visibility: hidden;
+    transition: all 0.3s ease;
+}
+
+.privacy-overlay.active {
+    opacity: 1;
+    visibility: visible;
+}
+
+.privacy-modal {
+    background: #2a2a2a;
+    border-radius: 15px;
+    padding: 35px;
+    max-width: 450px;
+    width: 90%;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+    transform: translateY(30px);
+    transition: transform 0.3s ease;
+}
+
+.privacy-overlay.active .privacy-modal {
+    transform: translateY(0);
+}
+
+.privacy-modal h2 {
+    color: #fff;
+    font-size: 22px;
+    margin-bottom: 15px;
+    font-family: Arial, sans-serif;
+}
+
+.privacy-modal p {
+    color: #ccc;
+    line-height: 1.5;
+    margin-bottom: 25px;
+    font-family: Arial, sans-serif;
+}
+
+.privacy-btn {
+    background: #000;
+    color: #fff;
+    border: none;
+    padding: 12px 25px;
+    border-radius: 25px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.3s ease;
+}
+
+.privacy-btn:hover {
+    background: #333;
+}
+
+        /* Skills com Progress Bars */
+        .skill-item {
+            margin-bottom: 15px;
+        }
+
+        .skill-name {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
             font-weight: 600;
         }
 
-        .table-container {
-            overflow-x: auto;
-            border-radius: 10px;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        .skill-bar {
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-            min-width: 1200px;
+        .skill-progress {
+            height: 100%;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+            border-radius: 4px;
+            animation: fillBar 2s ease-out;
         }
 
-        th, td {
-            padding: 15px 12px;
-            text-align: left;
-            border-bottom: 1px solid #e1e5e9;
+        @keyframes fillBar {
+            from { width: 0; }
+        }
+
+        /* Timeline para Experiência */
+        .timeline {
+            position: relative;
+            padding-left: 20px;
+        }
+
+        .timeline::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 2px;
+            background: linear-gradient(180deg, #667eea, #764ba2);
+        }
+
+        .timeline-item {
+            position: relative;
+            margin-bottom: 30px;
+            padding-left: 30px;
+        }
+
+        .timeline-item::before {
+            content: '';
+            position: absolute;
+            left: -25px;
+            top: 5px;
+            width: 12px;
+            height: 12px;
+            background: #667eea;
+            border-radius: 50%;
+            border: 3px solid white;
+            box-shadow: 0 0 0 3px #667eea;
+        }
+
+        .timeline-date {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.8rem;
+            display: inline-block;
+            margin-bottom: 8px;
+        }
+
+        .timeline-title {
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .timeline-description {
+            color: #666;
             font-size: 0.9rem;
         }
 
-        th {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
+        /* Projetos em Destaque */
+        .project-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .project-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1));
+            border-radius: 15px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            border: 1px solid rgba(102, 126, 234, 0.2);
+        }
+
+        .project-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 30px rgba(102, 126, 234, 0.2);
+        }
+
+        .project-title {
             font-weight: 600;
-            position: sticky;
-            top: 0;
-            z-index: 10;
+            margin-bottom: 10px;
+            color: #333;
         }
 
-        tr:nth-child(even) {
-            background: rgba(102, 126, 234, 0.05);
-        }
-
-        tr:hover {
-            background: rgba(102, 126, 234, 0.1);
-            transform: scale(1.01);
-            transition: all 0.2s ease;
-        }
-
-        .edit-btn {
-            background: #28a745;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: all 0.3s ease;
-            margin-right: 5px;
+        .project-link {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            color: #667eea;
             text-decoration: none;
-            display: inline-block;
+            font-weight: 500;
+            transition: color 0.3s ease;
         }
 
-        .edit-btn:hover {
-            background: #218838;
-            transform: scale(1.05);
+        .project-link:hover {
+            color: #764ba2;
         }
 
-        .delete-btn {
-            background: #dc3545;
-            color: white;
-            border: none;
-            padding: 8px 12px;
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.8rem;
-            transition: all 0.3s ease;
+        /* Seção Full Width */
+        .full-width {
+            grid-column: 1 / -1;
         }
 
-        .delete-btn:hover {
-            background: #c82333;
-            transform: scale(1.05);
-        }
-
-        .stats {
+        /* Certificações com Badges */
+        .cert-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 20px;
-            margin-bottom: 40px;
+            gap: 15px;
         }
 
-        .stat-card {
-            background: white;
-            padding: 25px;
-            border-radius: 15px;
+        .cert-badge {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 15px;
+            border-radius: 12px;
             text-align: center;
-            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
-            border: 1px solid rgba(102, 126, 234, 0.1);
-            transition: all 0.3s ease;
-        }
-
-        .stat-card:hover {
-            transform: translateY(-5px);
-            box-shadow: 0 15px 35px rgba(0, 0, 0, 0.15);
-        }
-
-        .stat-number {
-            font-size: 2.5rem;
-            font-weight: 700;
-            color: #667eea;
-            margin-bottom: 10px;
-        }
-
-        .stat-label {
-            color: #6c757d;
-            font-size: 1rem;
             font-weight: 500;
+            transition: transform 0.3s ease;
         }
 
-        .empty-state {
+        .cert-badge:hover {
+            transform: scale(1.05);
+        }
+
+        /* Footer */
+        .footer {
             text-align: center;
-            padding: 60px 20px;
-            color: #6c757d;
+            padding: 30px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            margin-top: 30px;
+            color: #666;
         }
 
-        .empty-state i {
-            font-size: 4rem;
-            margin-bottom: 20px;
-            opacity: 0.3;
-        }
-
+        /* Responsive */
         @media (max-width: 768px) {
-            .content {
-                padding: 20px;
-            }
-            
-            .form-grid {
+            .main-grid {
                 grid-template-columns: 1fr;
             }
             
             .header h1 {
                 font-size: 2rem;
             }
+            
+            .contact-quick {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .container {
+                padding: 10px;
+            }
+        }
+
+        /* Animações de entrada */
+        .card {
+            opacity: 0;
+            transform: translateY(30px);
+            animation: slideUp 0.6s ease forwards;
+        }
+
+        .card:nth-child(1) { animation-delay: 0.1s; }
+        .card:nth-child(2) { animation-delay: 0.2s; }
+        .card:nth-child(3) { animation-delay: 0.3s; }
+        .card:nth-child(4) { animation-delay: 0.4s; }
+
+        @keyframes slideUp {
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Botão de Download CV */
+        .download-btn {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 25px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            text-decoration: none;
+            margin-top: 20px;
+        }
+
+        .download-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(102, 126, 234, 0.3);
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>📋 Sistema de Coleta de Dados Consulares</h1>
-            <p>Gerencie processos consulares de forma eficiente e organizada</p>
-        </div>
-
-        <div class="content">
-            <?php if (isset($_GET['msg'])): ?>
-                <div class="alert">
-                    <?php echo htmlspecialchars($_GET['msg']); ?>
-                </div>
-            <?php endif; ?>
-
-            <!-- Estatísticas -->
-            <div class="stats">
-                <div class="stat-card">
-                    <div class="stat-number"><?php echo $estatisticas['total_processos'] ?? 0; ?></div>
-                    <div class="stat-label">Total de Registros</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number"><?php echo round($estatisticas['tempo_medio_vfs'] ?? 0); ?></div>
-                    <div class="stat-label">Tempo Médio VFS (dias)</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-number"><?php echo round($estatisticas['tempo_medio_consulado'] ?? 0); ?></div>
-                    <div class="stat-label">Tempo Médio Consulado (dias)</div>
-                </div>
-            </div>
-
-            <!-- Formulário -->
-            <div class="form-section">
-                <h2>📝 <?php echo $editando ? 'Editar Registro' : 'Adicionar Novo Registro'; ?></h2>
-                <form method="POST">
-                    <input type="hidden" name="acao" value="<?php echo $editando ? 'atualizar' : 'criar'; ?>">
-                    <?php if ($editando): ?>
-                        <input type="hidden" name="id" value="<?php echo $dadosEdicao['id']; ?>">
-                    <?php endif; ?>
-                    
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label for="nome">Nome Completo</label>
-                            <input type="text" id="nome" name="nome" required 
-                                   value="<?php echo $editando ? htmlspecialchars($dadosEdicao['nome']) : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="dataEnvioDoc">Data Envio Documentos</label>
-                            <input type="date" id="dataEnvioDoc" name="dataEnvioDoc" required
-                                   value="<?php echo $editando ? $dadosEdicao['data_envio_doc'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="dataRecebimentoVfs">Data Recebimento VFS</label>
-                            <input type="date" id="dataRecebimentoVfs" name="dataRecebimentoVfs"
-                                   value="<?php echo $editando ? $dadosEdicao['data_recebimento_vfs'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="vfsInformaEmail">VFS Informa Email Recebimento</label>
-                            <input type="date" id="vfsInformaEmail" name="vfsInformaEmail"
-                                   value="<?php echo $editando ? $dadosEdicao['vfs_informa_email'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="vfsInformaPendencia">VFS Informa Não Possuir Pendência</label>
-                            <input type="date" id="vfsInformaPendencia" name="vfsInformaPendencia"
-                                   value="<?php echo $editando ? $dadosEdicao['vfs_informa_pendencia'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="vfsCriouRef">VFS Criou Número de Referência</label>
-                            <input type="date" id="vfsCriouRef" name="vfsCriouRef"
-                                   value="<?php echo $editando ? $dadosEdicao['vfs_criou_ref'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="emailConsulado">Email Informa Recebimento Consulado</label>
-                            <input type="date" id="emailConsulado" name="emailConsulado"
-                                   value="<?php echo $editando ? $dadosEdicao['email_consulado'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="consuladoPendencia">Consulado Informa Ter Pendência</label>
-                            <input type="date" id="consuladoPendencia" name="consuladoPendencia"
-                                   value="<?php echo $editando ? $dadosEdicao['consulado_pendencia'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="consuladoDevolver">Consulado Informa Devolver Passaporte</label>
-                            <input type="date" id="consuladoDevolver" name="consuladoDevolver"
-                                   value="<?php echo $editando ? $dadosEdicao['consulado_devolver'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="tipoInvestimento">Carta Convite ou Próprio Investimento</label>
-                            <select id="tipoInvestimento" name="tipoInvestimento">
-                                <option value="">Selecione...</option>
-                                <option value="Carta Convite" <?php echo ($editando && $dadosEdicao['tipo_investimento'] == 'Carta Convite') ? 'selected' : ''; ?>>Carta Convite</option>
-                                <option value="Próprio Investimento" <?php echo ($editando && $dadosEdicao['tipo_investimento'] == 'Próprio Investimento') ? 'selected' : ''; ?>>Próprio Investimento</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label for="dataFinalizou">Data Finalizou</label>
-                            <input type="date" id="dataFinalizou" name="dataFinalizou"
-                                   value="<?php echo $editando ? $dadosEdicao['data_finalizou'] : ''; ?>">
-                        </div>
-                        <div class="form-group">
-                            <label for="local">Local VFS</label>
-                            <select id="local" name="local">
-                                <option value="">Selecione...</option>
-                                <option value="RJ" <?php echo ($editando && $dadosEdicao['local'] == 'RJ') ? 'selected' : ''; ?>>Rio de Janeiro (RJ)</option>
-                                <option value="SP" <?php echo ($editando && $dadosEdicao['local'] == 'SP') ? 'selected' : ''; ?>>São Paulo (SP)</option>
-                                <option value="BH" <?php echo ($editando && $dadosEdicao['local'] == 'BH') ? 'selected' : ''; ?>>Belo Horizonte (BH)</option>
-                                <option value="BSB" <?php echo ($editando && $dadosEdicao['local'] == 'BSB') ? 'selected' : ''; ?>>Brasília (BSB)</option>
-                                <option value="Outro" <?php echo ($editando && $dadosEdicao['local'] == 'Outro') ? 'selected' : ''; ?>>Outro</option>
-                            </select>
-                        </div>
-                    </div>
-                    <button type="submit" class="btn-primary">
-                        <?php echo $editando ? '💾 Salvar Alterações' : '➕ Adicionar Registro'; ?>
-                    </button>
-                    <?php if ($editando): ?>
-                        <a href="<?php echo $_SERVER['PHP_SELF']; ?>" class="btn-secondary">❌ Cancelar</a>
-                    <?php endif; ?>
-                    <button type="reset" class="btn-secondary">🗑️ Limpar</button>
-                </form>
-            </div>
-
-            <!-- Tabela de Dados -->
-            <div class="table-section">
-                <h2>📊 Registros Salvos</h2>
-                <?php if (empty($registros)): ?>
-                    <div class="empty-state">
-                        <div style="font-size: 4rem; margin-bottom: 20px; opacity: 0.3;">📄</div>
-                        <h3>Nenhum registro encontrado</h3>
-                        <p>Adicione seu primeiro registro usando o formulário acima.</p>
-                    </div>
-                <?php else: ?>
-                    <div class="table-container">
-                        <table>
-                            <thead>
-                                <tr>
-                                    <th>Nome</th>
-                                    <th>Data Envio Doc.</th>
-                                    <th>Data Receb. VFS</th>
-                                    <th>VFS Email</th>
-                                    <th>VFS Sem Pendência</th>
-                                    <th>VFS Núm. Ref.</th>
-                                    <th>Email Consulado</th>
-                                    <th>Consulado Pendência</th>
-                                    <th>Consulado Devolver</th>
-                                    <th>Tipo</th>
-                                    <th>Data Finalizou</th>
-                                    <th>Tempo VFS</th>
-                                    <th>Tempo Consulado</th>
-                                    <th>Local</th>
-                                    <th>Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($registros as $registro): ?>
-                                    <tr>
-                                        <td><strong><?php echo htmlspecialchars($registro['nome']); ?></strong></td>
-                                        <td><?php echo formatarData($registro['data_envio_doc']); ?></td>
-                                        <td><?php echo formatarData($registro['data_recebimento_vfs']); ?></td>
-                                        <td><?php echo formatarData($registro['vfs_informa_email']); ?></td>
-                                        <td><?php echo formatarData($registro['vfs_informa_pendencia']); ?></td>
-                                        <td><?php echo formatarData($registro['vfs_criou_ref']); ?></td>
-                                        <td><?php echo formatarData($registro['email_consulado']); ?></td>
-                                        <td><?php echo formatarData($registro['consulado_pendencia']); ?></td>
-                                        <td><?php echo formatarData($registro['consulado_devolver']); ?></td>
-                                        <td><?php echo $registro['tipo_investimento'] ?: '-'; ?></td>
-                                        <td><?php echo formatarData($registro['data_finalizou']); ?></td>
-                                        <td><?php echo $registro['tempo_vfs'] ? $registro['tempo_vfs'] . ' dias' : '-'; ?></td>
-                                        <td><?php echo $registro['tempo_consulado'] ? $registro['tempo_consulado'] . ' dias' : '-'; ?></td>
-                                        <td>
-                                            <?php if ($registro['local']): ?>
-                                                <span style="background: #667eea; color: white; padding: 4px 8px; border-radius: 4px; font-size: 0.8rem;">
-                                                    
-                                            <?php echo $registro['local']; ?>
-                                                </span>
-                                            <?php else: ?>
-                                                -
-                                            <?php endif; ?>
-                                        </td>
-                                        <td>
-                                            <a href="<?php echo $_SERVER['PHP_SELF']; ?>?editar=<?php echo $registro['id']; ?>" class="edit-btn">✏️ Editar</a>
-                                            <form method="POST" style="display: inline;" onsubmit="return confirm('Tem certeza que deseja excluir este registro?');">
-                                                <input type="hidden" name="acao" value="excluir">
-                                                <input type="hidden" name="id" value="<?php echo $registro['id']; ?>">
-                                                <button type="submit" class="delete-btn">🗑️ Excluir</button>
-                                            </form>
-                                        </td>
-                                    </tr>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
-            </div>
+    
+    <div class="privacy-overlay" id="privacyOverlay">
+        <div class="privacy-modal">
+            <h2>Política de privacidade</h2>
+            <p>Utilizamos cookies e outras tecnologias semelhantes para melhorar a sua experiência no nosso site. Ao continuar navegando, você declara que está de acordo com a nossa política de privacidade. Válido para todos os sites da Hinshitsu Services.</p>
+            <button class="privacy-btn" onclick="acceptPrivacy()">Li e aceito!</button>
         </div>
     </div>
 
-    <script>
-        // Adicionar funcionalidades JavaScript
-        document.addEventListener('DOMContentLoaded', function() {
-            // Animação suave para os cards de estatística
-            const statCards = document.querySelectorAll('.stat-card');
-            statCards.forEach((card, index) => {
-                card.style.opacity = '0';
-                card.style.transform = 'translateY(20px)';
-                setTimeout(() => {
-                    card.style.transition = 'all 0.6s ease';
-                    card.style.opacity = '1';
-                    card.style.transform = 'translateY(0)';
-                }, index * 100);
-            });
-
-            // Melhorar a experiência do usuário com validação
-            const form = document.querySelector('form');
-            const requiredFields = form.querySelectorAll('input[required]');
+    
+    <div class="container">
+        <!-- Header Principal -->
+        <header class="header">
+            <div class="profile-img">
+                <i class="fas fa-user-tie"></i>
+            </div>
+            <h1>Danilo de Almeida Souza Soares</h1>
+            <p>Analista de TI | Bacharel em Ciência da Computação (Licenciatura em Portugal) (2020-2023), Pós-graduado Qualidade de Software. NOC, Datacenter&Cloud, Zabbix, Grafana, Dynatrace, Python, PHP | Pós-Graduando em Engenharia de Software | Pós-Graduando no MBA Executivo em Gestão de Qualidade e Processos </p>
             
-            requiredFields.forEach(field => {
-                field.addEventListener('blur', function() {
-                    if (this.value.trim() === '') {
-                        this.style.borderColor = '#dc3545';
-                        this.style.boxShadow = '0 0 0 3px rgba(220, 53, 69, 0.1)';
-                    } else {
-                        this.style.borderColor = '#28a745';
-                        this.style.boxShadow = '0 0 0 3px rgba(40, 167, 69, 0.1)';
+            <div class="contact-quick">
+                <a href="tel:+5521974206850" class="contact-item">
+                    <i class="fas fa-phone"></i>
+                    (21) 97420-6850
+                </a>
+                <a href="mailto:daniloassoares@gmail.com" class="contact-item">
+                    <i class="fas fa-envelope"></i>
+                    daniloassoares@gmail.com
+                </a>
+                <a href="https://www.linkedin.com/in/danilo-de-a-s-soares-98596928" target="_blank" class="contact-item">
+                    <i class="fab fa-linkedin"></i>
+                    LinkedIn
+                </a>
+                <div class="contact-item">
+                    <i class="fas fa-map-marker-alt"></i>
+                    Bangu, Rio de Janeiro, RJ
+                </div>
+            </div>
+            
+            <a href="#" class="download-btn" onclick="alert('Funcionalidade de download será implementada! Acesse o meu LinkedIn, por favor!')">
+                <i class="fas fa-download"></i>
+                Download CV
+            </a>
+        </header>
+
+        <!-- Grid Principal -->
+        <div class="main-grid">
+            <!-- Resumo Profissional -->
+            <div class="card">
+                <h2><i class="fas fa-user"></i> Resumo Profissional</h2>
+                <p> Profissional com mais de 5 anos de experiência em Monitoramento de Servidores, Redes e Serviços de TI. Atuação em grandes empresas como Solutis, G&P e Global Hitss para os clientes Furnas, Eletrobrás, MPRJ e Caixa Econômica Federal. Experiência com Datacenter, suporte técnico, automação, Gestão de Mudanças, bases de dados (Oracle, SQL, DB2) e linguagens como Python e PHP. Gestão de Processos com BMC Remedy. Descendente de portugueses (bisavô José Alves Soares, natural de Aveiro), com processo de cidadania portuguesa em andamento e Visto de Procura de Trabalho na Embaixada (Consulado). Procuro oportunidades em gestão de TI, monitoramento de infraestrutura ou gestão de mudanças, contribuindo com a minha experiência técnica sólida em ambientes críticos. Disponível para trabalho presencial, híbrido ou remoto. Flexibilidade total para estabelecer residência em Portugal.</p>
+            </div>
+
+            <!-- Competências -->
+            <div class="card">
+                <h2><i class="fas fa-cogs"></i> Competências Técnicas</h2>
+                <div class="skill-item">
+                    <div class="skill-name">
+                        <span>Monitoramento (Zabbix, Grafana, Check_MK, Dynatrace, Nagios)</span>
+                        <span>90%</span>
+                    </div>
+                    <div class="skill-bar">
+                        <div class="skill-progress" style="width: 90%"></div>
+                    </div>
+                </div>
+                
+                <div class="skill-item">
+                    <div class="skill-name">
+                        <span>Banco de Dados (SQL, Oracle, DB2)</span>
+                        <span>75%</span>
+                    </div>
+                    <div class="skill-bar">
+                        <div class="skill-progress" style="width: 75%"></div>
+                    </div>
+                </div>
+                
+                <div class="skill-item">
+                    <div class="skill-name">
+                        <span>Python & PHP</span>
+                        <span>80%</span>
+                    </div>
+                    <div class="skill-bar">
+                        <div class="skill-progress" style="width: 80%"></div>
+                    </div>
+                </div>
+                
+                <div class="skill-item">
+                    <div class="skill-name">
+                        <span>Automação, Inovação & Scripts</span>
+                        <span>79%</span>
+                    </div>
+                    <div class="skill-bar">
+                        <div class="skill-progress" style="width: 79%"></div>
+                    </div>
+                </div>
+                
+                <div class="skill-item">
+                    <div class="skill-name">
+                        <span>Gestão de Implantação & Projetos ITIL, Devops e Qualidade</span>
+                        <span>88%</span>
+                    </div>
+                    <div class="skill-bar">
+                        <div class="skill-progress" style="width: 88%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Experiência Profissional -->
+            <div class="card">
+                <h2><i class="fas fa-briefcase"></i> Experiência Profissional</h2>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-date">nov de 2023 - fev de 2025</div>
+                        <div class="timeline-title">Global Hitss - Analista de Gestão de Mudanças e Implantação de Softwares</div>
+                        <div class="timeline-description">Analista de Gestão de Projetos de Mudanças, Implantação (Deploy) e Atualizações (Updates) de Novas Funcionalidades e Requisitos de Softwares no Cliente Caixa Econômica Federal (CEPTI) com a gestão de todo o processo de Software da Implantação de novo sistema, nova funcionalidade, requisitos, redundância de sistema, certificação, suporte, melhorias, atualizações e desativação de software de sistemas. Acompanhamento de janelas do processo de Mudanças com a utilização do sistema BMC Remedy.</div>
+                    </div>
+
+                    <div class="timeline-item">
+                        <div class="timeline-date">mar de 2023 - nov de 2023</div>
+                        <div class="timeline-title">Global Hitss - Analista Intermediário de Produção ou Analista de Demandas Internas</div>
+                        <div class="timeline-description">Atendimento de Incidentes e Requisições dos clientes de maneira especializada e direcionada para Demandas Internas de ocorrências detalhadas pelo cliente com consulta, adição e edição de códigos que o cliente solicita para Banco de Dados SQL, DB2, Oracle, NoSQL e Big Data Hadoop em Tabelas e SGBDs específicos dos sistemas internos. Pedidos internos de execução de Scripts, Schedules e Automações de processos pelo BMC Control-M no Cliente Caixa Econômica Federal CEPTI.</div>
+                    </div>
+
+                    <div class="timeline-item">
+                        <div class="timeline-date">set de 2022 - mar de 2023</div>
+                        <div class="timeline-title">Global Hitss - Analista de Monitoração II</div>
+                        <div class="timeline-description">Monitoramento de Servidores e Serviços no Cliente Caixa Econômica Federal CEPTI. Utilizando Grafana, Zabbix, NAVA, Graylog, painéis Java e PHP, IBM Cloud, IBM Control Center e sistemas internos de métricas do funcionamento de API's de serviços. Monitoração de serviços em Mainframe, Big Data Hadoop, Banco de dados DB2, sistema IBM Control Center e protocolo ICP de Certificação. Integração com São Paulo e Brasília. Relatório de dados coletados para acompanhamentos gerenciais e análise dos dados e incidentes acompanhados principalmente do PIX (Brazilian Swift) e outros serviços bancários e lotéricos.</div>
+                    </div> </div> </div>
+                    
+            <div class="card">
+                <div class="timeline">
+
+                    <div class="timeline-item">
+                        <div class="timeline-date">jul de 2022 - set de 2022</div>
+                        <div class="timeline-title">G&P - Analista de Monitoração 4</div>
+                        <div class="timeline-description">Monitoramento de Servidores e Serviços no Cliente Caixa Econômica Federal. Utilizando Grafana, Zabbix e sistemas internos de métricas do funcionamento de API's de serviços. Funcionamento 24x7 da Monitoração de serviços financeiros em Mainframe, Big Data Hadoop, Banco de dados DB2, sistema IBM Control Center e protocolo ICP de Certificação. Utilização do sistema de gerenciamento de incidentes BMC Remedy para abertura e verificação de chamados de incidentes e requerimentos. Comunicação utilizando o Microsoft Teams. Terminou o contrato de licitação no dia 12 de Setembro de 2022.</div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-date">dez de 2021 - ago de 2022</div>
+                        <div class="timeline-title">Solutis Tecnologias - Analista de Suporte Computacional – Monitoring Analyst I</div>
+                        <div class="timeline-description">Monitoramento de Servidores e Redes, usando Prompt de Comando Windows, Zabbix, Dynatrace, Nagios, Green4T, Admin Center Microsoft 365 Serviço Aviso de Integridade, HPE Data Protector Backup, análise de medidores de voltagem, umidade e temperatura, gráficos de falhas e tempo de resposta de serviços de aplicação interna do MPRJ, informações dos ILOs e IDRACs com recebimento do Active Directory Health Monitor toda manhã, abertura de protocolo de atendimento em sistema interno Cherwell e acionando pelo Microsoft Teams, telefone ou pessoalmente. O MPRJ não tinha Equipe de Monitoramento, então implantamos o projeto no início. Trabalhando na Gerência de Operações.</div>
+                    </div>
+                </div>
+
+                    <div class="timeline-item">
+                        <div class="timeline-date">jun de 2020 - dez de 2021</div>
+                        <div class="timeline-title">Solutis Tecnologias - Técnico de Informática em Monitoramento de Servidores e Redes Eletrobras e Furnas – Monitoring Analyst I</div>
+                        <div class="timeline-description">Monitoramento usando Prompt de Comando Windows, Zabbix, Check_MK, Trellis DCIM Vertiv, IBM Lotus Notes, VMWare vSphere, Pools de Discos Hitachi Command Suite 8, análise de medidores de voltagem, umidade e temperatura, abertura de protocolo de atendimento em sistema interno BMC Remedy. Escala 12x36 noite até manhã. Atendendo Eletrobras e Furnas no mesmo contrato. Diretamente no Datacenter da Eletrobras e cuidamos dos dois Datacenters fisicamente no controle de acesso e verificação presencial de problemas, além de auxiliar os analistas e técnicos nos problemas com cabeamento de rede, servidores, switches, storages, robots HP e IBM de fitas de backup, refrigeração, segurança e controle de incêndio.</div>
+                    </div>
+                </div>
+
+            <!-- Formação Acadêmica -->
+            <div class="card">
+                <h2><i class="fas fa-graduation-cap"></i> Formação Acadêmica</h2>
+                <div class="timeline">
+                    <div class="timeline-item">
+                        <div class="timeline-date">2023 - Cursando</div>
+                        <div class="timeline-title">MBA Executivo em Gestão da Qualidade de Processos</div>
+                        <div class="timeline-description">Celso Lisboa</div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-date">2023 - Cursando</div>
+                        <div class="timeline-title">Pós-Graduação em Engenharia de Software</div>
+                        <div class="timeline-description">Celso Lisboa</div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-date">2020 - 2023</div>
+                        <div class="timeline-title">Bacharelado em Ciência da Computação</div>
+                        <div class="timeline-description">UNISUAM / Cruzeiro do Sul</div>
+                    </div> </div> </div>
+                    
+            <div class="card">
+                <div class="timeline">
+
+                    <div class="timeline-item">
+                        <div class="timeline-date">2014 - 2015</div>
+                        <div class="timeline-title">Pós-Graduação em Metrologia e Qualidade Aplicada à Área de Software</div>
+                        <div class="timeline-description">FAETERJ e INMETRO</div>
+                    </div>
+                    
+                    <div class="timeline-item">
+                        <div class="timeline-date">2013 - 2015</div>
+                        <div class="timeline-title">Técnico Subsequente em Eletrônica <br> Registrado no CFT-BR nº 201600332-4 </div>
+                        <div class="timeline-description">FAETEC</div>
+                    </div>
+                    <div class="timeline-item">
+                        <div class="timeline-date">2009 - 2012</div>
+                        <div class="timeline-title">Tecnologia em Gestão de Recursos Humanos. <br> Registro Desativado CRA-RJ nº 03-01013</div>
+                        <div class="timeline-description">Universidade Castelo Branco (UCB-Realengo)</div>
+                    </div>
+                </div>
+            </div>
+
+<?php
+            // Ótimo desempenho acadêmico. Experiência de Profissional Autônomo como Técnico em Montagem, Manutenção e Configuração de Computadores e Redes (2007-2022), experiência em Serviços TI, Atendimento, Manutenção de Hardware, Impressoras, Automação e Softwares, conhecimentos de cursos complementares em Fibra Óptica, Redes, UML, Java, Administração Financeira, software de gestão de departamento pessoal, informática, inglês intermediário, manutenção e projetos de Eletrônica, experiência em atendimento, organização de dados, conseguir atenção de clientes e atendimento de recepção. À procura de oportunidades em minhas áreas de formação que sejam úteis para o desenvolvimento profissional e econômico da empresa interessada em meus serviços.
+?>
+
+            <!-- Certificações -->
+            <div class="card full-width">
+                <h2><i class="fas fa-certificate"></i> Certificações</h2>
+                <div class="cert-grid">
+                    <div class="cert-badge">
+                        <i class="fab fa-microsoft"></i><br>
+                        MD-100 Microsoft Windows 10
+                    </div>
+                    <div class="cert-badge">
+                        <i class="fas fa-headset"></i><br>
+                        HDI Support Center Analyst (SCA) - Introdução ao ITIL
+                    </div>
+                    <div class="cert-badge">
+                        <i class="fas fa-bolt"></i><br>
+                        NR-10 (precisa ser renovada)
+                    </div>
+                </div>
+            </div>
+
+            <!-- Projetos Desenvolvidos -->
+            <div class="card">
+                <h2><i class="fas fa-code"></i> Projetos Desenvolvidos</h2>
+                <div class="project-card">
+                    <div class="project-title">Sistema de Cálculo de Tempo para o Visto de Procura de Trabalho para Portugal</div>
+                    <p>Aplicação web desenvolvida para auxiliar no cálculo de tempo necessário para visto de procura de trabalho em Portugal.</p>
+                    <a href="https://hinshitsu.site/visto/" target="_blank" class="project-link">
+                        <i class="fas fa-external-link-alt"></i>
+                        Acessar Sistema
+                    </a>
+                </div>
+                <br>
+                <h3><i class="fas fa-code"></i> Desenvolvi Três Projetos que deixei para o Monitoramento do MPRJ como um diferencial: </h3>
+
+                <div class="project-card">
+                    <div class="project-title">Projeto Livro de Ocorrências em Microsoft OneNote</div>
+                    <p>A ideia era seguir o funcionamento como do Etherpad Lite, só que usando o Microsoft OneNote para registro dos ocorridos do dia e registrando quem escreveu, além das aberturas de ocorrências.</p>
+                        <div class="project-link">
+                            <i class="fas fa-lock"></i>
+                        Projeto Empresarial Interno
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Projeto Gerador de Template Pronto na Intranet em PHP e XAMPP</div>
+                    <p>A ideia era desenvolver uma forma automática para preencher as informações que eram necessárias para registrar nos incidentes, então preencher o template e informar de maneira automatizada para só registrar.</p>
+                        <div class="project-link">
+                            <i class="fas fa-lock"></i>
+                        Projeto Empresarial Interno
+                    </div>
+                </div>
+
+                <div class="project-card">
+                    <div class="project-title">Projeto Automação em Parte da Abertura de Chamados utilizando a ferramenta One Step do Cherwell</div>
+                    <p>A ideia era fazer o sistema registrar sozinho o que era desejado depois do preenchimento no outro sistema, porém alguns funcionavam e outros não. Mesmo assim garantiria um pouco do que era necessário.</p>
+                        <div class="project-link">
+                            <i class="fas fa-lock"></i>
+                        Projeto Empresarial Interno
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Hinshitsu Serviços e Vendas -->
+            <div class="card">
+                <h2><i class="fas fa-store"></i> Hinshitsu Serviços e Vendas</h2>
+                <div class="project-card">
+                    <div class="project-title">Hinshitsu Vendas</div>
+                    <p>Loja online especializada na venda de livros, revistas, mangás e jogos através da plataforma Shopee ou Whatsapp.</p>
+                    <a href="https://hinshitsu.site/vendas/" target="_blank" class="project-link">
+                        <i class="fas fa-shopping-cart"></i>
+                        Visitar Loja
+                    </a> 
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>© <?php echo date("Y"); ?> Danilo de Almeida Souza Soares. Todos os direitos reservados.
+            <a href="https://hinshitsu.site/" target="_blank" class="project-link">
+                        <i class="fas fa-external-link-alt"></i>
+                        Hinshitsu Services </p>
+                    </a>            
+            <p>Desenvolvido com <i class="fas fa-heart" style="color: #e74c3c;"></i> pela Tecnologia e muito café ☕</p>
+        </footer>
+    </div>
+
+    <script>
+        // Animação suave para as barras de habilidade
+        document.addEventListener('DOMContentLoaded', function() {
+            const skillBars = document.querySelectorAll('.skill-progress');
+            
+            const observerOptions = {
+                threshold: 0.5,
+                rootMargin: '0px 0px -100px 0px'
+            };
+            
+            const observer = new IntersectionObserver(function(entries) {
+                entries.forEach(entry => {
+                    if (entry.isIntersecting) {
+                        entry.target.style.animationPlayState = 'running';
                     }
                 });
+            }, observerOptions);
+            
+            skillBars.forEach(bar => {
+                bar.style.animationPlayState = 'paused';
+                observer.observe(bar);
             });
-
-            // Adicionar feedback visual para botões
-            const buttons = document.querySelectorAll('button, .edit-btn');
-            buttons.forEach(button => {
-                button.addEventListener('click', function() {
-                    this.style.transform = 'scale(0.95)';
-                    setTimeout(() => {
-                        this.style.transform = '';
-                    }, 150);
-                });
-            });
-
-            // Auto-save para localStorage (opcional - comentado pois pode não ser necessário)
-            /*
-            const formInputs = document.querySelectorAll('input, select');
-            formInputs.forEach(input => {
-                input.addEventListener('change', function() {
-                    localStorage.setItem('form_' + this.name, this.value);
-                });
-                
-                // Restaurar valores salvos
-                const savedValue = localStorage.getItem('form_' + input.name);
-                if (savedValue && !input.value) {
-                    input.value = savedValue;
-                }
-            });
-            */
-
-            // Melhorar a responsividade da tabela
-            const table = document.querySelector('table');
-            if (table && window.innerWidth < 768) {
-                table.style.fontSize = '0.8rem';
-            }
-
-            // Adicionar indicador de loading para formulários
-            const submitBtn = document.querySelector('button[type="submit"]');
-            if (submitBtn) {
-                form.addEventListener('submit', function() {
-                    submitBtn.innerHTML = '⏳ Processando...';
-                    submitBtn.disabled = true;
-                });
-            }
         });
 
-        // Função para confirmar exclusão com mais detalhes
-        function confirmarExclusao(nome) {
-            return confirm(`Tem certeza que deseja excluir o registro de ${nome}?\n\nEsta ação não pode ser desfeita.`);
+        // Smooth scroll para links internos
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({
+                        behavior: 'smooth',
+                        block: 'start'
+                    });
+                }
+            });
+        });
+
+        // Efeito de digitação no título (opcional)
+        function typeWriter(element, text, speed = 100) {
+            let i = 0;
+            element.innerHTML = '';
+            
+            function typing() {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i);
+                    i++;
+                    setTimeout(typing, speed);
+                }
+            }
+            typing();
         }
 
-        // Função para exportar dados (placeholder para futura implementação)
-        function exportarDados() {
-            alert('Funcionalidade de exportação será implementada em breve!');
-        }
+        // Adicionar alguns micro-interactions
+        document.querySelectorAll('.card').forEach(card => {
+            card.addEventListener('mouseenter', function() {
+                this.style.transform = 'translateY(-10px) scale(1.02)';
+            });
+            
+            card.addEventListener('mouseleave', function() {
+                this.style.transform = 'translateY(-10px) scale(1)';
+            });
+        });
+        
+        function showPrivacyModal() {
+    document.getElementById('privacyOverlay').classList.add('active');
+}
 
-        // Adicionar funcionalidade de busca/filtro (placeholder)
-        function filtrarTabela() {
-            // Implementar filtro de busca na tabela
-            console.log('Filtro será implementado');
-        }
+function hidePrivacyModal() {
+    document.getElementById('privacyOverlay').classList.remove('active');
+}
+
+function acceptPrivacy() {
+    localStorage.setItem('privacy', 'accepted');
+    hidePrivacyModal();
+}
+
+// Fecha clicando fora
+document.getElementById('privacyOverlay').onclick = function(e) {
+    if (e.target === this) hidePrivacyModal();
+}
+
+// Auto-exibe se não foi aceito
+if (!localStorage.getItem('privacy')) {
+    setTimeout(showPrivacyModal, 1000);
+}
+        
     </script>
 </body>
 </html>
-
-<?php
-// SQL para criar as tabelas necessárias (comentado - executar apenas uma vez)
-/*
-CREATE DATABASE IF NOT EXISTS dados_consulares CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-
-USE dados_consulares;
-
-CREATE TABLE IF NOT EXISTS processos_consulares (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    nome VARCHAR(255) NOT NULL,
-    data_envio_doc DATE,
-    data_recebimento_vfs DATE,
-    vfs_informa_email DATE,
-    vfs_informa_pendencia DATE,
-    vfs_criou_ref DATE,
-    email_consulado DATE,
-    consulado_pendencia DATE,
-    consulado_devolver DATE,
-    tipo_investimento ENUM('Carta Convite', 'Próprio Investimento'),
-    data_finalizou DATE,
-    local ENUM('RJ', 'SP', 'BH', 'BSB', 'Outro'),
-    tempo_vfs INT GENERATED ALWAYS AS (
-        CASE 
-            WHEN data_envio_doc IS NOT NULL AND data_recebimento_vfs IS NOT NULL 
-            THEN DATEDIFF(data_recebimento_vfs, data_envio_doc)
-            ELSE NULL 
-        END
-    ) STORED,
-    tempo_consulado INT GENERATED ALWAYS AS (
-        CASE 
-            WHEN data_recebimento_vfs IS NOT NULL AND data_finalizou IS NOT NULL 
-            THEN DATEDIFF(data_finalizou, data_recebimento_vfs)
-            ELSE NULL 
-        END
-    ) STORED,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-);
-
--- View para estatísticas
-CREATE OR REPLACE VIEW vw_estatisticas AS
-SELECT 
-    COUNT(*) as total_processos,
-    AVG(tempo_vfs) as tempo_medio_vfs,
-    AVG(tempo_consulado) as tempo_medio_consulado,
-    COUNT(CASE WHEN data_finalizou IS NOT NULL THEN 1 END) as processos_finalizados,
-    COUNT(CASE WHEN tipo_investimento = 'Carta Convite' THEN 1 END) as carta_convite,
-    COUNT(CASE WHEN tipo_investimento = 'Próprio Investimento' THEN 1 END) as proprio_investimento
-FROM processos_consulares;
-*/
-?>
